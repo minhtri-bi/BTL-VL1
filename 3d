@@ -1,0 +1,236 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import FancyArrowPatch
+from mpl_toolkits.mplot3d import proj3d
+
+mu_0 = 4 * np.pi * 1e-7
+
+class Arrow3D(FancyArrowPatch):
+    """Vẽ mũi tên 3D"""
+    def __init__(self, xs, ys, zs, *args, **kwargs):
+        super().__init__((0,0), (0,0), *args, **kwargs)
+        self._verts3d = xs, ys, zs
+
+    def do_3d_projection(self, renderer=None):
+        xs3d, ys3d, zs3d = self._verts3d
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
+        self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
+        return np.min(zs)
+
+def ve_mo_phong_chong_chat(R, I, xp, yp, zp, N_segments=16):
+    """
+    Mô phỏng việc cộng chồng chất các đóng góp dB từ các phần tử dl
+    
+    Parameters:
+    -----------
+    R : bán kính vòng dây (m)
+    I : cường độ dòng điện (A)
+    xp, yp, zp : tọa độ điểm P
+    N_segments : số phần tử dl để hiển thị
+    """
+    
+    # Tạo các góc alpha
+    alpha = np.linspace(0, 2*np.pi, N_segments, endpoint=False)
+    d_alpha = 2*np.pi / N_segments
+    
+    # Tọa độ các điểm trên vòng dây
+    x_wire = R * np.cos(alpha)
+    y_wire = R * np.sin(alpha)
+    z_wire = np.zeros(N_segments)
+    
+    # Điểm P
+    P = np.array([xp, yp, zp])
+    
+    # Tạo figure với 2 subplot
+    fig = plt.figure(figsize=(18, 8))
+    
+    # ===== SUBPLOT 1: Mô phỏng 3D =====
+    ax1 = fig.add_subplot(121, projection='3d')
+    
+    # Vẽ vòng dây hoàn chỉnh (đường mịn)
+    alpha_smooth = np.linspace(0, 2*np.pi, 100)
+    x_smooth = R * np.cos(alpha_smooth)
+    y_smooth = R * np.sin(alpha_smooth)
+    z_smooth = np.zeros(100)
+    ax1.plot(x_smooth, y_smooth, z_smooth, 'b-', linewidth=2, label='Vòng dây dẫn')
+    
+    # Vẽ điểm P
+    ax1.scatter([xp], [yp], [zp], color='red', s=200, marker='o', 
+                label=f'Điểm P({xp:.2f}, {yp:.2f}, {zp:.2f})', edgecolors='black', linewidths=2)
+    
+    # Tính và vẽ các vector cho mỗi phần tử dl
+    B_total = np.array([0.0, 0.0, 0.0])
+    colors = plt.cm.rainbow(np.linspace(0, 1, N_segments))
+    
+    for k in range(N_segments):
+        # Vị trí phần tử dl
+        r_wire = np.array([x_wire[k], y_wire[k], z_wire[k]])
+        
+        # Vector từ phần tử dl đến điểm P
+        r_vec = P - r_wire
+        r_mag = np.linalg.norm(r_vec)
+        
+        if r_mag <= 0:
+            continue
+        
+        # Vector dl (tiếp tuyến với vòng dây)
+        dl = R * d_alpha * np.array([-np.sin(alpha[k]), np.cos(alpha[k]), 0])
+        
+        # Tính dB theo Biot-Savart
+        dB = (mu_0 * I / (4*np.pi)) * np.cross(dl, r_vec) / (r_mag**3)
+        B_total += dB
+        
+        # Vẽ vector dl (màu xanh lá)
+        scale_dl = 0.3
+        arrow_dl = Arrow3D([x_wire[k], x_wire[k] + dl[0]*scale_dl],
+                          [y_wire[k], y_wire[k] + dl[1]*scale_dl],
+                          [z_wire[k], z_wire[k] + dl[2]*scale_dl],
+                          mutation_scale=15, lw=2, arrowstyle='->', color='green')
+        ax1.add_artist(arrow_dl)
+        
+        # Vẽ vector r (từ dl đến P) (màu cam)
+        scale_r = 0.8
+        arrow_r = Arrow3D([x_wire[k], x_wire[k] + r_vec[0]*scale_r],
+                         [y_wire[k], y_wire[k] + r_vec[1]*scale_r],
+                         [z_wire[k], z_wire[k] + r_vec[2]*scale_r],
+                         mutation_scale=15, lw=1.5, arrowstyle='->', 
+                         color='orange', alpha=0.5)
+        ax1.add_artist(arrow_r)
+        
+        # Vẽ vector dB (màu đỏ)
+        scale_dB = 1e7  # Scale để dB hiển thị rõ
+        arrow_dB = Arrow3D([x_wire[k], x_wire[k] + dB[0]*scale_dB],
+                          [y_wire[k], y_wire[k] + dB[1]*scale_dB],
+                          [z_wire[k], z_wire[k] + dB[2]*scale_dB],
+                          mutation_scale=15, lw=2, arrowstyle='->', 
+                          color=colors[k], alpha=0.7)
+        ax1.add_artist(arrow_dB)
+        
+        # Đánh dấu các điểm trên vòng dây
+        ax1.scatter([x_wire[k]], [y_wire[k]], [z_wire[k]], 
+                   color=colors[k], s=50, alpha=0.8)
+    
+    # Vẽ vector B tổng tại điểm P
+    B_magnitude = np.linalg.norm(B_total)
+    scale_B = 2e7
+    arrow_B = Arrow3D([xp, xp + B_total[0]*scale_B],
+                     [yp, yp + B_total[1]*scale_B],
+                     [zp, zp + B_total[2]*scale_B],
+                     mutation_scale=20, lw=3, arrowstyle='->', 
+                     color='red', label='B tổng')
+    ax1.add_artist(arrow_B)
+    
+    ax1.set_xlabel('X (m)', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Y (m)', fontsize=12, fontweight='bold')
+    ax1.set_zlabel('Z (m)', fontsize=12, fontweight='bold')
+    ax1.set_title('Mô phỏng cộng chồng chất dl×r\n(Định luật Biot-Savart)', 
+                 fontsize=14, fontweight='bold')
+    ax1.legend(fontsize=10)
+    
+    # Thiết lập giới hạn trục
+    max_range = R * 1.5
+    ax1.set_xlim([-max_range, max_range])
+    ax1.set_ylim([-max_range, max_range])
+    ax1.set_zlim([0, max_range*1.2])
+    
+    # ===== SUBPLOT 2: Vòng tròn với góc alpha và dl =====
+    ax2 = fig.add_subplot(122)
+    
+    # Vẽ vòng tròn
+    theta = np.linspace(0, 2*np.pi, 100)
+    ax2.plot(R*np.cos(theta), R*np.sin(theta), 'b-', linewidth=2, label='Vòng dây')
+    
+    # Vẽ các góc alpha và vector dl
+    for k in range(N_segments):
+        # Điểm trên vòng dây
+        ax2.plot(x_wire[k], y_wire[k], 'o', color=colors[k], markersize=8)
+        
+        # Vẽ góc alpha từ tâm
+        ax2.plot([0, x_wire[k]], [0, y_wire[k]], '--', 
+                color=colors[k], alpha=0.3, linewidth=1)
+        
+        # Vector dl
+        dl = R * d_alpha * np.array([-np.sin(alpha[k]), np.cos(alpha[k])])
+        scale_dl = 0.5
+        ax2.arrow(x_wire[k], y_wire[k], 
+                 dl[0]*scale_dl, dl[1]*scale_dl,
+                 head_width=0.1*R, head_length=0.15*R, 
+                 fc=colors[k], ec=colors[k], linewidth=2, alpha=0.8)
+        
+        # Ghi nhãn góc α
+        if k % 2 == 0:  # Chỉ ghi nhãn cho một số góc để không bị đông
+            angle_deg = np.degrees(alpha[k])
+            label_r = R * 0.6
+            ax2.text(label_r*np.cos(alpha[k]), label_r*np.sin(alpha[k]), 
+                    f'α={angle_deg:.0f}°', fontsize=8, ha='center')
+    
+    # Vẽ tâm
+    ax2.plot(0, 0, 'ko', markersize=10, label='Tâm O')
+    
+    # Vẽ hệ trục tọa độ
+    ax2.arrow(0, 0, R*0.8, 0, head_width=0.1*R, head_length=0.1*R, 
+             fc='black', ec='black', linewidth=2, alpha=0.5)
+    ax2.text(R*0.9, 0, 'x', fontsize=14, fontweight='bold')
+    ax2.arrow(0, 0, 0, R*0.8, head_width=0.1*R, head_length=0.1*R, 
+             fc='black', ec='black', linewidth=2, alpha=0.5)
+    ax2.text(0, R*0.9, 'y', fontsize=14, fontweight='bold')
+    
+    ax2.set_xlabel('X (m)', fontsize=12, fontweight='bold')
+    ax2.set_ylabel('Y (m)', fontsize=12, fontweight='bold')
+    ax2.set_title(f'Phân bố góc α và vector dl\n(N={N_segments} phần tử)', 
+                 fontsize=14, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    ax2.legend(fontsize=10)
+    ax2.set_aspect('equal')
+    ax2.set_xlim([-R*1.3, R*1.3])
+    ax2.set_ylim([-R*1.3, R*1.3])
+
+    plt.tight_layout(rect=[0, 0, 0.85, 1])
+    plt.show()
+    
+    return B_total, B_magnitude
+
+def main():
+    print("="*70)
+    print("MÔ PHỎNG CỘNG CHỒNG CHẤT CÁC ĐL×DR - ĐỊNH LUẬT BIOT-SAVART".center(70))
+    print("="*70)
+    
+    try:
+        R = float(input("\nNhập bán kính vòng dây R (m) [mặc định: 0.1]: ") or "0.1")
+        I = float(input("Nhập cường độ dòng điện I (A) [mặc định: 5]: ") or "5")
+        xp = float(input("Nhập tọa độ x của điểm P (m) [mặc định: 0]: ") or "0")
+        yp = float(input("Nhập tọa độ y của điểm P (m) [mặc định: 0]: ") or "0")
+        zp = float(input("Nhập tọa độ z của điểm P (m) [mặc định: 0.1]: ") or "0.1")
+        N_segments = int(input("Nhập số phần tử dl để hiển thị [mặc định: 16]: ") or "16")
+        
+        if R <= 0:
+            print("Lỗi: Bán kính phải dương!")
+            return
+        
+        if N_segments < 4 or N_segments > 32:
+            print("Cảnh báo: Số phần tử nên trong khoảng 4-32 để hiển thị rõ ràng!")
+            N_segments = max(4, min(32, N_segments))
+        
+        print(f"\n{'='*70}")
+        print("ĐANG TẠO MÔ PHỎNG...".center(70))
+        print(f"{'='*70}\n")
+        
+        B_total, B_magnitude = ve_mo_phong_chong_chat(R, I, xp, yp, zp, N_segments)
+        
+        print(f"\n{'='*70}")
+        print("KẾT QUẢ TÍNH TOÁN".center(70))
+        print(f"{'='*70}")
+        print(f"Từ trường tổng tại P: |B| = {B_magnitude:.6e} T")
+        print(f"Các thành phần:")
+        print(f"  Bx = {B_total[0]:.6e} T")
+        print(f"  By = {B_total[1]:.6e} T")
+        print(f"  Bz = {B_total[2]:.6e} T")
+        print(f"{'='*70}\n")
+        
+    except ValueError:
+        print("Lỗi: Vui lòng nhập số hợp lệ!")
+    except Exception as e:
+        print(f"Lỗi: {e}")
+
+if __name__ == "__main__":
+    main()
