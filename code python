@@ -1,0 +1,213 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from tabulate import tabulate   
+
+
+mu_0 = 4 * np.pi * 1e-7  
+
+def tinh_tu_truong_biot_savart(R, I, xp, yp, zp, sovongday, N=200):
+    """Tính từ trường tại điểm P bằng định luật Biot-Savart"""
+    alpha = np.linspace(0, 2*np.pi, N, endpoint=False)
+    d_alpha = 2*np.pi / N
+    """2"""
+    x_wire = R * np.cos(alpha)
+    y_wire = R * np.sin(alpha)
+    z_wire = np.zeros(N)
+    """1"""
+    P = np.array([xp, yp, zp])
+    B_point = np.array([0.0, 0.0, 0.0])
+    
+    for k in range(N):
+        r_wire = np.array([x_wire[k], y_wire[k], z_wire[k]])
+        r_vec = P - r_wire
+        r_mag = np.linalg.norm(r_vec)
+        
+        if r_mag <= 0:  
+            continue
+        
+        dl = R * d_alpha * np.array([-np.sin(alpha[k]), np.cos(alpha[k]), 0])
+        
+        dB = (mu_0 * I / (4*np.pi)) * np.cross(dl, r_vec) / (r_mag**3)
+        B_point += dB * sovongday
+    
+    return B_point, x_wire, y_wire, z_wire
+
+def tinh_tu_truong_luoi(R, I, sovongday, N_grid=100, N_wire=200):
+    """Tính từ trường trên lưới điểm"""
+    # Tính tọa độ dây dẫn một lần
+    alpha = np.linspace(0, 2*np.pi, N_wire, endpoint=False)
+    x_wire = R * np.cos(alpha)
+    y_wire = R * np.sin(alpha)
+    z_wire = np.zeros(N_wire)
+
+    grid = np.linspace(-2*R, 2*R, N_grid)
+    X, Z = np.meshgrid(grid, grid)
+    Y = np.zeros_like(X)
+
+    Bx = np.zeros_like(X)
+    By = np.zeros_like(X)
+    Bz = np.zeros_like(X)
+    print("Đang tính toán ...")
+
+    for i in range(N_grid):
+        for j in range(N_grid):
+            # Sử dụng hàm tinh_tu_truong_biot_savart đã có
+            B, _, _, _ = tinh_tu_truong_biot_savart(R, I, X[j,i], Y[j,i], Z[j,i], sovongday, N_wire)
+            Bx[j,i] = B[0]
+            By[j,i] = B[1]
+            Bz[j,i] = B[2]
+
+    return X, Y, Z, Bx, By, Bz, x_wire, y_wire, z_wire
+
+def trace_field_line(x0, z0, R, I, sovongday, step=0.5, n_steps=1000, direction=1):
+    """Vẽ đường sức từ theo 1 hướng"""
+    x_line, z_line = [x0], [z0]
+    r = np.array([x0, 0, z0])
+
+    for _ in range(n_steps):
+        B, _, _, _ = tinh_tu_truong_biot_savart(R, I, r[0], 0, r[2], sovongday)
+        Bxz = np.array([B[0], B[2]])
+        B_norm = np.linalg.norm(Bxz)
+        if B_norm == 0:
+            break
+        dr = direction * Bxz / B_norm * step
+        r[0] += dr[0]
+        r[2] += dr[1]
+        x_line.append(r[0])
+        z_line.append(r[2])
+        if np.abs(r[0]) > 2*R or np.abs(r[2]) > 2*R:
+            break
+
+    return np.array(x_line), np.array(z_line)
+
+def ve_duong_suc_qua_diem(xp, zp, R, I, sovongday):
+    """Vẽ đường sức từ 2 chiều đi qua điểm P"""
+    x_fwd, z_fwd = trace_field_line(xp, zp, R, I, sovongday, direction=1)
+    x_bwd, z_bwd = trace_field_line(xp, zp, R, I, sovongday, direction=-1)
+    
+    # Ghép 2 nửa thành đường hoàn chỉnh
+    x_full = np.concatenate((x_bwd[::-1], x_fwd))
+    z_full = np.concatenate((z_bwd[::-1], z_fwd))
+    
+    return x_full, z_full
+
+def ve_do_thi(R, I, sovongday, xp, yp, zp, B_point, B_magnitude):
+    """Vẽ đồ thị từ trường"""
+    print("Đang khởi tạo dữ liệu ...")
+
+    X, Y, Z, Bx, By, Bz, x_wire, y_wire, z_wire = tinh_tu_truong_luoi(R, I, sovongday)
+    B_mag = np.sqrt(Bx**2 + By**2 + Bz**2)
+
+    fig = plt.figure(figsize=(15, 6))
+    print("Đang vẽ bảng ...")
+   
+    ax1 = fig.add_subplot(111)
+    stream = ax1.streamplot(X, Z, Bx, Bz, color=B_mag, cmap='viridis', 
+                           density=1, linewidth=1.5, arrowsize=1.5)
+    
+    ax1.plot(x_wire, z_wire, 'y-', linewidth=3, label='Vong day dan')
+    ax1.plot(xp, zp, 'yo', markersize=10, label=f'Diem P({xp:.2f}, {yp:.2f}, {zp:.2f})')
+    print("Đang tạo điểm P...")
+   
+    ax1.quiver(xp, zp, B_point[0], B_point[2], angles='xy',
+               scale_units='xy', scale=None,
+               color='blue', width=0.005)
+    ax1.quiver(xp, zp, B_point[0], 0, angles='xy',
+               scale_units='xy', scale=None,
+               color='cyan', width=0.005)
+    ax1.quiver(xp, zp, 0, B_point[2], angles='xy',
+               scale_units='xy', scale=None,
+               color='magenta', width=0.005)
+    
+    x_line, z_line = ve_duong_suc_qua_diem(xp, zp, R, I, sovongday)
+    ax1.plot(x_line, z_line, 'r', linewidth=1.5, label='Đường sức đi qua P')
+   
+    ax1.set_xlabel('x (m)', fontsize=14, fontweight='bold')
+    ax1.set_ylabel('z (m)', fontsize=14, fontweight='bold')
+    ax1.set_title(f'Đường sức từ (mặt phẳng xz)\nR={R}m, I={I}A', fontsize=16, fontweight='bold', pad=20)
+    ax1.grid(True, alpha=0.3, linewidth=1.5)
+    ax1.legend(fontsize=9, loc='upper left')
+    ax1.set_aspect('equal')
+    ax1.tick_params(labelsize=10)
+       
+    info_text = (
+        f"Thông tin mô phỏng:\n"
+        f"----------------------\n"
+        f"R = {R:.3f} m\n"
+        f"I = {I:.3f} A\n"
+        f"Số vòng dây = {sovongday:.0f}\n"
+        f"Bx = {B_point[0]:.3e} T\n"
+        f"By = {B_point[1]:.3e} T\n"
+        f"Bz = {B_point[2]:.3e} T\n"
+        f"|B| = {B_magnitude:.3e} T"
+    )
+
+    props = dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.85, edgecolor='black')
+    ax1.text(
+        1.03, 0.95, info_text,
+        transform=ax1.transAxes,
+        fontsize=10,
+        verticalalignment='top',
+        bbox=props
+    )
+    
+    print("Bảng đã hoàn thành!")
+
+    plt.tight_layout()
+    plt.show()
+
+def main():
+    print("="*60)
+    print("TINH TU TRUONG CUA DONG DIEN TRON - DINH LUAT BIOT-SAVART".center(60))
+    print("="*60)
+
+    try:
+        sovongday = float(input("\nNhap so vong day dan: "))
+        R = float(input("Nhap ban kinh vong day (m): "))
+        I = float(input("Nhap cuong do dong dien (A): "))
+        xp = float(input("Nhap toa do x cua diem can tinh (m): "))
+        yp = float(input("Nhap toa do y cua diem can tinh (m): "))
+        zp = float(input("Nhap toa do z cua diem can tinh (m): "))
+      
+        if R <= 0 or I < 0 or sovongday < 1:
+            print("Loi: Ban kinh phai duong va dong dien khac 0!")
+            return
+    
+        B_point, _, _, _ = tinh_tu_truong_biot_savart(R, I, xp, yp, zp, sovongday)
+        B_magnitude = np.linalg.norm(B_point)
+        
+        B_center = mu_0 * I * sovongday / (2 * R)
+        print(f"\n{'='*60}")
+        print(f"KET QUA TINH TOAN".center(60))
+        print(f"{'='*60}")
+        
+        data = [
+            ["Bán kính vòng dây (R)", f"{R:.3f} m"],
+            ["Cường độ dòng điện (I)", f"{I:.3f} A"],
+            ["Số vòng dây", f"{sovongday:.0f}"],
+            ["Bx", f"{B_point[0]:.6e} T"],
+            ["By", f"{B_point[1]:.6e} T"],
+            ["Bz", f"{B_point[2]:.6e} T"],
+            ["|B|", f"{B_magnitude:.6e} T"],
+            ["B tại tâm vòng dây", f"{B_center:.6e} T"]
+        ]
+
+        print("\n" + tabulate(data, headers=["Thông số", "Giá trị"], tablefmt="grid"))
+        print(f"\n{'='*60}\n")
+        
+        if np.abs(xp) > 2*R or np.abs(zp) > 2*R:
+            print("\n" + "!"*60)
+            print("CANH BAO: Diem P nam ngoai vung hien thi do thi [-2R, 2R]!")
+            print("          Diem P se KHONG HIEN THI tren do thi!")
+            print("          Nhung ket qua tinh toan van CHINH XAC!")
+            print("!"*60 + "\n")
+        
+        ve_do_thi(R, I, sovongday, xp, yp, zp, B_point, B_magnitude)
+  
+    except ValueError:
+        print("Loi: Vui long nhap so hop le!")
+    except Exception as e:
+        print(f"Loi: {e}")
+
+if __name__ == "__main__":
+    main()
