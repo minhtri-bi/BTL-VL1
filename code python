@@ -59,7 +59,7 @@ def tinh_tu_truong_luoi(R, I, sovongday, N_grid=100, N_wire=200):
 
     return X, Y, Z, Bx, By, Bz, x_wire, y_wire, z_wire
 
-def trace_field_line(x0, z0, R, I, sovongday, step=0.5, n_steps=1000, direction=1):
+def trace_field_line(x0, z0, R, I, sovongday, step=0.05, n_steps=1010000, direction=1):
     """Vẽ đường sức từ theo 1 hướng"""
     x_line, z_line = [x0], [z0]
     r = np.array([x0, 0, z0])
@@ -160,54 +160,56 @@ def main():
     print("="*60)
     print("TINH TU TRUONG CUA DONG DIEN TRON - DINH LUAT BIOT-SAVART".center(60))
     print("="*60)
-
-    try:
-        sovongday = float(input("\nNhap so vong day dan: "))
-        R = float(input("Nhap ban kinh vong day (m): "))
-        I = float(input("Nhap cuong do dong dien (A): "))
-        xp = float(input("Nhap toa do x cua diem can tinh (m): "))
-        yp = float(input("Nhap toa do y cua diem can tinh (m): "))
-        zp = float(input("Nhap toa do z cua diem can tinh (m): "))
-      
-        if R <= 0 or I < 0 or sovongday < 1:
-            print("Loi: Ban kinh phai duong va dong dien khac 0!")
-            return
+    While True:
+        try:
+            sovongday = float(input("\nNhap so vong day dan: "))
+            R = float(input("Nhap ban kinh vong day (m): "))
+            I = float(input("Nhap cuong do dong dien (A): "))
+            xp = float(input("Nhap toa do x cua diem can tinh (m): "))
+            yp = float(input("Nhap toa do y cua diem can tinh (m): "))
+            zp = float(input("Nhap toa do z cua diem can tinh (m): "))
+          
+            if R <= 0 or I < 0 or sovongday < 1:
+                print("Loi: Ban kinh phai duong va dong dien khac 0!")
+                return
+        
+            B_point, _, _, _ = tinh_tu_truong_biot_savart(R, I, xp, yp, zp, sovongday)
+            B_magnitude = np.linalg.norm(B_point)
+            
+            B_center = mu_0 * I * sovongday / (2 * R)
+            print(f"\n{'='*60}")
+            print(f"KET QUA TINH TOAN".center(60))
+            print(f"{'='*60}")
+            
+            data = [
+                ["Bán kính vòng dây (R)", f"{R:.3f} m"],
+                ["Cường độ dòng điện (I)", f"{I:.3f} A"],
+                ["Số vòng dây", f"{sovongday:.0f}"],
+                ["Bx", f"{B_point[0]:.6e} T"],
+                ["By", f"{B_point[1]:.6e} T"],
+                ["Bz", f"{B_point[2]:.6e} T"],
+                ["|B|", f"{B_magnitude:.6e} T"],
+                ["B tại tâm vòng dây", f"{B_center:.6e} T"]
+            ]
     
-        B_point, _, _, _ = tinh_tu_truong_biot_savart(R, I, xp, yp, zp, sovongday)
-        B_magnitude = np.linalg.norm(B_point)
-        
-        B_center = mu_0 * I * sovongday / (2 * R)
-        print(f"\n{'='*60}")
-        print(f"KET QUA TINH TOAN".center(60))
-        print(f"{'='*60}")
-        
-        data = [
-            ["Bán kính vòng dây (R)", f"{R:.3f} m"],
-            ["Cường độ dòng điện (I)", f"{I:.3f} A"],
-            ["Số vòng dây", f"{sovongday:.0f}"],
-            ["Bx", f"{B_point[0]:.6e} T"],
-            ["By", f"{B_point[1]:.6e} T"],
-            ["Bz", f"{B_point[2]:.6e} T"],
-            ["|B|", f"{B_magnitude:.6e} T"],
-            ["B tại tâm vòng dây", f"{B_center:.6e} T"]
-        ]
+            print("\n" + tabulate(data, headers=["Thông số", "Giá trị"], tablefmt="grid"))
+            print(f"\n{'='*60}\n")
+            
+            if np.abs(xp) > 2*R or np.abs(zp) > 2*R:
+                print("\n" + "!"*60)
+                print("CANH BAO: Diem P nam ngoai vung hien thi do thi [-2R, 2R]!")
+                print("          Diem P se KHONG HIEN THI tren do thi!")
+                print("          Nhung ket qua tinh toan van CHINH XAC!")
+                print("!"*60 + "\n")
+            
+            ve_do_thi(R, I, sovongday, xp, yp, zp, B_point, B_magnitude)
+            if input("\nBan co muon tiep tuc khong? (y/n): ") != 'y':
+                break
+        except ValueError:
+            print("Loi: Vui long nhap so hop le!")
+        except Exception as e:
+            print(f"Loi: {e}")
 
-        print("\n" + tabulate(data, headers=["Thông số", "Giá trị"], tablefmt="grid"))
-        print(f"\n{'='*60}\n")
-        
-        if np.abs(xp) > 2*R or np.abs(zp) > 2*R:
-            print("\n" + "!"*60)
-            print("CANH BAO: Diem P nam ngoai vung hien thi do thi [-2R, 2R]!")
-            print("          Diem P se KHONG HIEN THI tren do thi!")
-            print("          Nhung ket qua tinh toan van CHINH XAC!")
-            print("!"*60 + "\n")
-        
-        ve_do_thi(R, I, sovongday, xp, yp, zp, B_point, B_magnitude)
-  
-    except ValueError:
-        print("Loi: Vui long nhap so hop le!")
-    except Exception as e:
-        print(f"Loi: {e}")
 
 if __name__ == "__main__":
     main()
